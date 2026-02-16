@@ -266,8 +266,10 @@ jobs:
       - name: Build iOS Device (unsigned)
         env:
           CI: true
+          APPLE_SIGNING_IDENTITY: ""
+          APPLE_DEVELOPMENT_TEAM: ""
         run: |
-          npm run tauri -- ios build --ci --target aarch64 --export-method debugging
+          npm run tauri -- ios build --ci --target aarch64 --config '{"bundle":{"iOS":{"developmentTeam":null}}}'
 
       - name: Snapshot device build outputs
         run: |
