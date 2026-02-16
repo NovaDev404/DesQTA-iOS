@@ -184,9 +184,14 @@ jobs:
       - name: Install dependencies
         run: npm i
 
-      - name: Ensure CocoaPods is available
+      - name: Install iOS build tooling
         run: |
-          pod --version || sudo gem install cocoapods
+          brew update
+          brew install xcodegen libimobiledevice cocoapods
+          brew link --overwrite cocoapods || true
+          echo "PATH=$(brew --prefix)/bin:$PATH" >> $GITHUB_ENV
+          which pod
+          pod --version
 
       - name: Clean stale iOS generated project
         run: |
@@ -196,7 +201,7 @@ jobs:
       - name: Initialize iOS project (CI)
         env:
           CI: true
-        run: npm run tauri -- ios init --ci --reinstall-deps
+        run: npm run tauri -- ios init --ci
 
       - name: Verify generated iOS project files
         id: ios_generated
