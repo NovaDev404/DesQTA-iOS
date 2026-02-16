@@ -451,10 +451,10 @@ jobs:
       - name: Build iOS Device (unsigned)
         env:
           CI: true
-          APPLE_SIGNING_IDENTITY: ""
-          APPLE_DEVELOPMENT_TEAM: ""
         run: |
-          pnpm tauri ios build --ci --target aarch64 --config '{"bundle":{"iOS":{"developmentTeam":null}}}'
+          unset APPLE_SIGNING_IDENTITY
+          unset APPLE_DEVELOPMENT_TEAM
+          pnpm tauri ios build --ci --target aarch64
 
       - name: Validate device build output exists
         run: |
