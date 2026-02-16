@@ -52,3 +52,126 @@ jobs:
         run: echo "BUILD_TIME=$(date -u +"%Y-%m-%d %H:%M:%S UTC")" >> $GITHUB_OUTPUT
 
       # Removed GitHub Release publishing. Artifacts are attached to this workflow run only.
+
+  nightly-ios-build:
+    runs-on: macos-latest
+
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios,aarch64-apple-ios-sim,x86_64-apple-ios
+
+      - name: Install Tauri CLI
+        run: npm install -g @tauri-apps/cli
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Ensure CocoaPods is available
+        run: |
+          pod --version || sudo gem install cocoapods
+
+      - name: Initialize iOS project
+        run: npm run tauri ios init
+
+      - name: Resolve iOS project container and scheme
+        id: ios_project
+        run: |
+          XCODE_WORKSPACE=$(find src-tauri/gen/apple -name '*.xcworkspace' | head -1)
+          XCODE_PROJECT=$(find src-tauri/gen/apple -name '*.xcodeproj' | head -1)
+          SCHEME=$(find src-tauri/gen/apple -name '*.xcscheme' | head -1 | xargs basename | sed 's/.xcscheme$//')
+
+          if [ -z "$SCHEME" ]; then
+            echo "No iOS scheme found under src-tauri/gen/apple"
+            exit 1
+          fi
+
+          if [ -n "$XCODE_WORKSPACE" ]; then
+            echo "container_type=workspace" >> $GITHUB_OUTPUT
+            echo "container_path=$XCODE_WORKSPACE" >> $GITHUB_OUTPUT
+          elif [ -n "$XCODE_PROJECT" ]; then
+            echo "container_type=project" >> $GITHUB_OUTPUT
+            echo "container_path=$XCODE_PROJECT" >> $GITHUB_OUTPUT
+          else
+            echo "No iOS Xcode workspace/project found under src-tauri/gen/apple"
+            exit 1
+          fi
+
+          echo "scheme=$SCHEME" >> $GITHUB_OUTPUT
+
+      - name: Build iOS Simulator (unsigned)
+        run: |
+          if [ "${{ steps.ios_project.outputs.container_type }}" = "workspace" ]; then
+            xcodebuild \
+              -workspace "${{ steps.ios_project.outputs.container_path }}" \
+              -scheme "${{ steps.ios_project.outputs.scheme }}" \
+              -configuration Release \
+              -sdk iphonesimulator \
+              -destination 'generic/platform=iOS Simulator' \
+              -derivedDataPath src-tauri/gen/apple/build \
+              CODE_SIGNING_ALLOWED=NO \
+              build
+          else
+            xcodebuild \
+              -project "${{ steps.ios_project.outputs.container_path }}" \
+              -scheme "${{ steps.ios_project.outputs.scheme }}" \
+              -configuration Release \
+              -sdk iphonesimulator \
+              -destination 'generic/platform=iOS Simulator' \
+              -derivedDataPath src-tauri/gen/apple/build \
+              CODE_SIGNING_ALLOWED=NO \
+              build
+          fi
+
+      - name: Build iOS Device (unsigned)
+        run: |
+          if [ "${{ steps.ios_project.outputs.container_type }}" = "workspace" ]; then
+            xcodebuild \
+              -workspace "${{ steps.ios_project.outputs.container_path }}" \
+              -scheme "${{ steps.ios_project.outputs.scheme }}" \
+              -configuration Release \
+              -sdk iphoneos \
+              -destination 'generic/platform=iOS' \
+              -derivedDataPath src-tauri/gen/apple/build \
+              CODE_SIGNING_ALLOWED=NO \
+              CODE_SIGNING_REQUIRED=NO \
+              CODE_SIGN_IDENTITY='' \
+              build
+          else
+            xcodebuild \
+              -project "${{ steps.ios_project.outputs.container_path }}" \
+              -scheme "${{ steps.ios_project.outputs.scheme }}" \
+              -configuration Release \
+              -sdk iphoneos \
+              -destination 'generic/platform=iOS' \
+              -derivedDataPath src-tauri/gen/apple/build \
+              CODE_SIGNING_ALLOWED=NO \
+              CODE_SIGNING_REQUIRED=NO \
+              CODE_SIGN_IDENTITY='' \
+              build
+          fi
+
+      - name: Package iOS build outputs
+        run: |
+          mkdir -p src-tauri/gen/apple/artifacts
+          cd src-tauri/gen/apple/build/Build/Products
+          zip -r ../../artifacts/ios-simulator-release.zip Release-iphonesimulator || true
+          zip -r ../../artifacts/ios-device-unsigned-release.zip Release-iphoneos || true
+
+      - name: Upload iOS build artifacts (workflow run)
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-ios-build-${{ github.ref_name }}
+          path: |
+            src-tauri/gen/apple/artifacts/ios-simulator-release.zip
+            src-tauri/gen/apple/artifacts/ios-device-unsigned-release.zip
