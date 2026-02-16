@@ -274,29 +274,46 @@ jobs:
         run: |
           pod --version || sudo gem install cocoapods
 
+      - name: Clean stale iOS generated project
+        run: |
+          rm -rf src-tauri/gen/apple
+          rm -rf src-tauri/gen/ios
+
       - name: Initialize iOS project (CI)
         env:
           CI: true
-        run: pnpm tauri ios init --ci
+        run: pnpm tauri ios init --ci --reinstall-deps
 
       - name: Verify generated iOS project files
+        id: ios_generated
         run: |
-          if [ ! -d src-tauri/gen/apple ]; then
-            echo "Missing iOS project directory: src-tauri/gen/apple"
+          if [ ! -d src-tauri/gen ]; then
+            echo "Missing generated mobile directory: src-tauri/gen"
             exit 1
           fi
 
-          XCODE_WORKSPACE=$(find src-tauri/gen/apple -name '*.xcworkspace' | head -1)
-          XCODE_PROJECT=$(find src-tauri/gen/apple -name '*.xcodeproj' | head -1)
-          XCODE_SCHEME=$(find src-tauri/gen/apple -name '*.xcscheme' | head -1)
+          XCODE_WORKSPACE=$(find src-tauri/gen -name '*.xcworkspace' | head -1)
+          XCODE_PROJECT=$(find src-tauri/gen -name '*.xcodeproj' | head -1)
+          XCODE_SCHEME=$(find src-tauri/gen -name '*.xcscheme' | head -1)
+          IOS_PROJECT_ROOT=""
+          if [ -n "$XCODE_WORKSPACE" ]; then
+            IOS_PROJECT_ROOT=$(dirname "$XCODE_WORKSPACE")
+          elif [ -n "$XCODE_PROJECT" ]; then
+            IOS_PROJECT_ROOT=$(dirname "$XCODE_PROJECT")
+          fi
 
           if [ -z "$XCODE_SCHEME" ]; then
-            echo "No iOS scheme found under src-tauri/gen/apple"
+            echo "No iOS scheme found under src-tauri/gen"
             exit 1
           fi
 
           if [ -z "$XCODE_WORKSPACE" ] && [ -z "$XCODE_PROJECT" ]; then
-            echo "No iOS Xcode workspace/project found under src-tauri/gen/apple"
+            echo "No iOS Xcode workspace/project found under src-tauri/gen"
+            exit 1
+          fi
+
+          if [ -z "$IOS_PROJECT_ROOT" ]; then
+            echo "Unable to resolve iOS project root"
             exit 1
           fi
 
@@ -304,6 +321,8 @@ jobs:
           [ -n "$XCODE_WORKSPACE" ] && echo "Workspace: $XCODE_WORKSPACE"
           [ -n "$XCODE_PROJECT" ] && echo "Project: $XCODE_PROJECT"
           echo "Scheme: $XCODE_SCHEME"
+          echo "Project root: $IOS_PROJECT_ROOT"
+          echo "project_root=$IOS_PROJECT_ROOT" >> $GITHUB_OUTPUT
 
       - name: Build iOS Simulator (unsigned)
         env:
@@ -313,22 +332,24 @@ jobs:
 
       - name: Validate simulator build output exists
         run: |
-          if [ ! -d src-tauri/gen/apple/build ]; then
-            echo "Expected build output at src-tauri/gen/apple/build"
+          IOS_PROJECT_ROOT='${{ steps.ios_generated.outputs.project_root }}'
+          if [ ! -d "$IOS_PROJECT_ROOT/build" ]; then
+            echo "Expected build output at $IOS_PROJECT_ROOT/build"
             exit 1
           fi
 
       - name: Package iOS simulator output
         run: |
-          mkdir -p src-tauri/gen/apple/artifacts
-          cd src-tauri/gen/apple
+          IOS_PROJECT_ROOT='${{ steps.ios_generated.outputs.project_root }}'
+          mkdir -p "$IOS_PROJECT_ROOT/artifacts"
+          cd "$IOS_PROJECT_ROOT"
           zip -r artifacts/ios-simulator-release.zip build
 
       - name: Upload iOS simulator artifacts
         uses: actions/upload-artifact@v4
         with:
           name: ios-simulator-builds
-          path: src-tauri/gen/apple/artifacts/ios-simulator-release.zip
+          path: src-tauri/gen/**/artifacts/ios-simulator-release.zip
 
   build-ios-unsigned:
     runs-on: macos-latest
@@ -359,29 +380,46 @@ jobs:
         run: |
           pod --version || sudo gem install cocoapods
 
+      - name: Clean stale iOS generated project
+        run: |
+          rm -rf src-tauri/gen/apple
+          rm -rf src-tauri/gen/ios
+
       - name: Initialize iOS project (CI)
         env:
           CI: true
-        run: pnpm tauri ios init --ci
+        run: pnpm tauri ios init --ci --reinstall-deps
 
       - name: Verify generated iOS project files
+        id: ios_generated
         run: |
-          if [ ! -d src-tauri/gen/apple ]; then
-            echo "Missing iOS project directory: src-tauri/gen/apple"
+          if [ ! -d src-tauri/gen ]; then
+            echo "Missing generated mobile directory: src-tauri/gen"
             exit 1
           fi
 
-          XCODE_WORKSPACE=$(find src-tauri/gen/apple -name '*.xcworkspace' | head -1)
-          XCODE_PROJECT=$(find src-tauri/gen/apple -name '*.xcodeproj' | head -1)
-          XCODE_SCHEME=$(find src-tauri/gen/apple -name '*.xcscheme' | head -1)
+          XCODE_WORKSPACE=$(find src-tauri/gen -name '*.xcworkspace' | head -1)
+          XCODE_PROJECT=$(find src-tauri/gen -name '*.xcodeproj' | head -1)
+          XCODE_SCHEME=$(find src-tauri/gen -name '*.xcscheme' | head -1)
+          IOS_PROJECT_ROOT=""
+          if [ -n "$XCODE_WORKSPACE" ]; then
+            IOS_PROJECT_ROOT=$(dirname "$XCODE_WORKSPACE")
+          elif [ -n "$XCODE_PROJECT" ]; then
+            IOS_PROJECT_ROOT=$(dirname "$XCODE_PROJECT")
+          fi
 
           if [ -z "$XCODE_SCHEME" ]; then
-            echo "No iOS scheme found under src-tauri/gen/apple"
+            echo "No iOS scheme found under src-tauri/gen"
             exit 1
           fi
 
           if [ -z "$XCODE_WORKSPACE" ] && [ -z "$XCODE_PROJECT" ]; then
-            echo "No iOS Xcode workspace/project found under src-tauri/gen/apple"
+            echo "No iOS Xcode workspace/project found under src-tauri/gen"
+            exit 1
+          fi
+
+          if [ -z "$IOS_PROJECT_ROOT" ]; then
+            echo "Unable to resolve iOS project root"
             exit 1
           fi
 
@@ -389,6 +427,8 @@ jobs:
           [ -n "$XCODE_WORKSPACE" ] && echo "Workspace: $XCODE_WORKSPACE"
           [ -n "$XCODE_PROJECT" ] && echo "Project: $XCODE_PROJECT"
           echo "Scheme: $XCODE_SCHEME"
+          echo "Project root: $IOS_PROJECT_ROOT"
+          echo "project_root=$IOS_PROJECT_ROOT" >> $GITHUB_OUTPUT
 
       - name: Build iOS Device (unsigned)
         env:
@@ -398,22 +438,24 @@ jobs:
 
       - name: Validate device build output exists
         run: |
-          if [ ! -d src-tauri/gen/apple/build ]; then
-            echo "Expected build output at src-tauri/gen/apple/build"
+          IOS_PROJECT_ROOT='${{ steps.ios_generated.outputs.project_root }}'
+          if [ ! -d "$IOS_PROJECT_ROOT/build" ]; then
+            echo "Expected build output at $IOS_PROJECT_ROOT/build"
             exit 1
           fi
 
       - name: Package iOS unsigned device output
         run: |
-          mkdir -p src-tauri/gen/apple/artifacts
-          cd src-tauri/gen/apple
+          IOS_PROJECT_ROOT='${{ steps.ios_generated.outputs.project_root }}'
+          mkdir -p "$IOS_PROJECT_ROOT/artifacts"
+          cd "$IOS_PROJECT_ROOT"
           zip -r artifacts/ios-device-unsigned-release.zip build
 
       - name: Upload iOS unsigned artifacts
         uses: actions/upload-artifact@v4
         with:
           name: ios-unsigned-builds
-          path: src-tauri/gen/apple/artifacts/ios-device-unsigned-release.zip
+          path: src-tauri/gen/**/artifacts/ios-device-unsigned-release.zip
 
   create-release:
     needs: [build-windows, build-macos-intel, build-macos-arm, build-android, build-ios-simulator, build-ios-unsigned]

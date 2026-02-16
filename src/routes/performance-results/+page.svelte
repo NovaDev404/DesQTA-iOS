@@ -24,9 +24,9 @@
     SystemMetrics,
   } from '../../lib/services/performanceTesting';
 
-  let results: TestResults | null = null;
-  let loading = true;
-  let error: string | null = null;
+  let results: TestResults | null = $state(null);
+  let loading = $state(true);
+  let error: string | null = $state(null);
 
   onMount(() => {
     // Get results from URL params or session storage
