@@ -114,6 +114,10 @@ jobs:
             IOS_PROJECT_ROOT=$(dirname "$XCODE_PROJECT")
           fi
 
+          if [[ "$IOS_PROJECT_ROOT" == *.xcodeproj ]]; then
+            IOS_PROJECT_ROOT=$(dirname "$IOS_PROJECT_ROOT")
+          fi
+
           if [ -z "$XCODE_SCHEME" ]; then
             echo "No iOS scheme found under src-tauri/gen"
             exit 1
@@ -144,7 +148,7 @@ jobs:
 
       - name: Snapshot simulator build outputs
         run: |
-          IOS_PROJECT_ROOT='${{ steps.ios_generated.outputs.project_root }}'
+          IOS_PROJECT_ROOT="${{ steps.ios_generated.outputs.project_root }}"
           rm -rf "$IOS_PROJECT_ROOT/build-simulator"
           if [ ! -d "$IOS_PROJECT_ROOT/build" ]; then
             echo "Expected build output at $IOS_PROJECT_ROOT/build"
@@ -160,7 +164,7 @@ jobs:
 
       - name: Snapshot device build outputs
         run: |
-          IOS_PROJECT_ROOT='${{ steps.ios_generated.outputs.project_root }}'
+          IOS_PROJECT_ROOT="${{ steps.ios_generated.outputs.project_root }}"
           rm -rf "$IOS_PROJECT_ROOT/build-device"
           if [ ! -d "$IOS_PROJECT_ROOT/build" ]; then
             echo "Expected build output at $IOS_PROJECT_ROOT/build"
@@ -170,7 +174,7 @@ jobs:
 
       - name: Package iOS build outputs
         run: |
-          IOS_PROJECT_ROOT='${{ steps.ios_generated.outputs.project_root }}'
+          IOS_PROJECT_ROOT="${{ steps.ios_generated.outputs.project_root }}"
           mkdir -p "$IOS_PROJECT_ROOT/artifacts"
           cd "$IOS_PROJECT_ROOT"
           zip -r artifacts/ios-simulator-release.zip build-simulator || true
