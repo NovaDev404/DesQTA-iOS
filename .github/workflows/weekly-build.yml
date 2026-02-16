@@ -81,92 +81,73 @@ jobs:
         run: |
           pod --version || sudo gem install cocoapods
 
-      - name: Initialize iOS project
-        run: npm run tauri ios init
+      - name: Initialize iOS project (CI)
+        env:
+          CI: true
+        run: npm run tauri -- ios init --ci
 
-      - name: Resolve iOS project container and scheme
-        id: ios_project
+      - name: Verify generated iOS project files
         run: |
+          if [ ! -d src-tauri/gen/apple ]; then
+            echo "Missing iOS project directory: src-tauri/gen/apple"
+            exit 1
+          fi
+
           XCODE_WORKSPACE=$(find src-tauri/gen/apple -name '*.xcworkspace' | head -1)
           XCODE_PROJECT=$(find src-tauri/gen/apple -name '*.xcodeproj' | head -1)
-          SCHEME=$(find src-tauri/gen/apple -name '*.xcscheme' | head -1 | xargs basename | sed 's/.xcscheme$//')
+          XCODE_SCHEME=$(find src-tauri/gen/apple -name '*.xcscheme' | head -1)
 
-          if [ -z "$SCHEME" ]; then
+          if [ -z "$XCODE_SCHEME" ]; then
             echo "No iOS scheme found under src-tauri/gen/apple"
             exit 1
           fi
 
-          if [ -n "$XCODE_WORKSPACE" ]; then
-            echo "container_type=workspace" >> $GITHUB_OUTPUT
-            echo "container_path=$XCODE_WORKSPACE" >> $GITHUB_OUTPUT
-          elif [ -n "$XCODE_PROJECT" ]; then
-            echo "container_type=project" >> $GITHUB_OUTPUT
-            echo "container_path=$XCODE_PROJECT" >> $GITHUB_OUTPUT
-          else
+          if [ -z "$XCODE_WORKSPACE" ] && [ -z "$XCODE_PROJECT" ]; then
             echo "No iOS Xcode workspace/project found under src-tauri/gen/apple"
             exit 1
           fi
 
-          echo "scheme=$SCHEME" >> $GITHUB_OUTPUT
+          echo "Found iOS container and scheme:"
+          [ -n "$XCODE_WORKSPACE" ] && echo "Workspace: $XCODE_WORKSPACE"
+          [ -n "$XCODE_PROJECT" ] && echo "Project: $XCODE_PROJECT"
+          echo "Scheme: $XCODE_SCHEME"
 
       - name: Build iOS Simulator (unsigned)
+        env:
+          CI: true
         run: |
-          if [ "${{ steps.ios_project.outputs.container_type }}" = "workspace" ]; then
-            xcodebuild \
-              -workspace "${{ steps.ios_project.outputs.container_path }}" \
-              -scheme "${{ steps.ios_project.outputs.scheme }}" \
-              -configuration Release \
-              -sdk iphonesimulator \
-              -destination 'generic/platform=iOS Simulator' \
-              -derivedDataPath src-tauri/gen/apple/build \
-              CODE_SIGNING_ALLOWED=NO \
-              build
-          else
-            xcodebuild \
-              -project "${{ steps.ios_project.outputs.container_path }}" \
-              -scheme "${{ steps.ios_project.outputs.scheme }}" \
-              -configuration Release \
-              -sdk iphonesimulator \
-              -destination 'generic/platform=iOS Simulator' \
-              -derivedDataPath src-tauri/gen/apple/build \
-              CODE_SIGNING_ALLOWED=NO \
-              build
+          npm run tauri -- ios build --ci --target aarch64-sim
+
+      - name: Snapshot simulator build outputs
+        run: |
+          rm -rf src-tauri/gen/apple/build-simulator
+          if [ ! -d src-tauri/gen/apple/build ]; then
+            echo "Expected build output at src-tauri/gen/apple/build"
+            exit 1
           fi
+          cp -R src-tauri/gen/apple/build src-tauri/gen/apple/build-simulator
 
       - name: Build iOS Device (unsigned)
+        env:
+          CI: true
         run: |
-          if [ "${{ steps.ios_project.outputs.container_type }}" = "workspace" ]; then
-            xcodebuild \
-              -workspace "${{ steps.ios_project.outputs.container_path }}" \
-              -scheme "${{ steps.ios_project.outputs.scheme }}" \
-              -configuration Release \
-              -sdk iphoneos \
-              -destination 'generic/platform=iOS' \
-              -derivedDataPath src-tauri/gen/apple/build \
-              CODE_SIGNING_ALLOWED=NO \
-              CODE_SIGNING_REQUIRED=NO \
-              CODE_SIGN_IDENTITY='' \
-              build
-          else
-            xcodebuild \
-              -project "${{ steps.ios_project.outputs.container_path }}" \
-              -scheme "${{ steps.ios_project.outputs.scheme }}" \
-              -configuration Release \
-              -sdk iphoneos \
-              -destination 'generic/platform=iOS' \
-              -derivedDataPath src-tauri/gen/apple/build \
-              CODE_SIGNING_ALLOWED=NO \
-              CODE_SIGNING_REQUIRED=NO \
-              CODE_SIGN_IDENTITY='' \
-              build
+          npm run tauri -- ios build --ci --target aarch64 --export-method debugging
+
+      - name: Snapshot device build outputs
+        run: |
+          rm -rf src-tauri/gen/apple/build-device
+          if [ ! -d src-tauri/gen/apple/build ]; then
+            echo "Expected build output at src-tauri/gen/apple/build"
+            exit 1
           fi
+          cp -R src-tauri/gen/apple/build src-tauri/gen/apple/build-device
 
       - name: Package iOS build outputs
         run: |
           mkdir -p src-tauri/gen/apple/artifacts
-          cd src-tauri/gen/apple/build/Build/Products
-          zip -r ../../artifacts/ios-simulator-release.zip Release-iphonesimulator || true
-          zip -r ../../artifacts/ios-device-unsigned-release.zip Release-iphoneos || true
+          cd src-tauri/gen/apple
+          zip -r artifacts/ios-simulator-release.zip build-simulator || true
+          zip -r artifacts/ios-device-unsigned-release.zip build-device || true
 
       - name: Upload iOS build artifacts (workflow run)
         uses: actions/upload-artifact@v4
